@@ -27,35 +27,18 @@ validate_rtsp_url() {
   return 0
 }
 
-# 检查 ffmpeg RTSP 支持
+# 检查 ffmpeg RTSP 支持 - 简化版本
 check_ffmpeg_rtsp() {
-  echo "Checking ffmpeg RTSP support..."
+  echo "Checking ffmpeg availability..."
   
-  # 检查ffmpeg版本和编译信息
-  echo "FFmpeg version info:"
-  ffmpeg -version 2>/dev/null | head -3
-  
-  # 获取完整的协议列表
-  echo "Getting protocol list..."
-  local protocol_output=$(ffmpeg -protocols 2>/dev/null)
-  
-  # 显示输入协议部分
-  echo "Input protocols:"
-  echo "$protocol_output" | sed -n '/Input:/,/Output:/p' | head -10
-  
-  # 检查RTSP协议支持（检查输入协议部分）
-  if echo "$protocol_output" | sed -n '/Input:/,/Output:/p' | grep -q "rtsp"; then
-    echo "✅ ffmpeg RTSP input support confirmed"
+  if command -v ffmpeg >/dev/null 2>&1; then
+    echo "✅ ffmpeg found: $(which ffmpeg)"
+    ffmpeg -version 2>/dev/null | head -1
+    echo "✅ Skipping protocol check - will test RTSP directly"
     return 0
   else
-    echo "❌ WARNING: ffmpeg may not support RTSP protocol"
-    echo ""
-    echo "Let's try a different check - test RTSP directly with a timeout..."
-    
-    # 尝试直接测试RTSP（但不依赖于协议列表）
-    # 这里我们跳过严格检查，让实际的RTSP测试来验证
-    echo "⚠️  Skipping protocol check, will test RTSP directly in stream test"
-    return 0
+    echo "❌ ERROR: ffmpeg not found"
+    return 1
   fi
 }
 
@@ -98,68 +81,42 @@ check_network_connectivity() {
   fi
 }
 
-# 检查 RTSP 流是否可用的函数
+# 简化的 RTSP 流检查函数
 check_stream2() {
-  # 首先验证 URL 格式和 ffmpeg 支持
-  if ! validate_rtsp_url; then
+  echo "🔍 Testing RTSP stream: $RTSP_URL"
+  
+  # 简单的URL验证
+  if [[ -z "$RTSP_URL" || ! "$RTSP_URL" =~ ^rtsp:// ]]; then
+    echo "❌ Invalid RTSP URL"
     return 1
   fi
   
-  if ! check_ffmpeg_rtsp; then
+  # 确认ffmpeg存在
+  if ! command -v ffmpeg >/dev/null 2>&1; then
+    echo "❌ ffmpeg not found"
     return 1
   fi
   
-  # 检查网络连接
-  if ! check_network_connectivity; then
-    echo "Network connectivity test failed"
-  fi
-
-  # 使用 ffmpeg 拉取 RTSP 流并获取输出，增加更多调试参数
-  echo "Testing RTSP connection to: $RTSP_URL"
-  echo "Using enhanced connection parameters..."
+  echo "🎯 Testing RTSP connection (2 second test)..."
   
-  # 使用更短的超时时间进行快速测试
-  output=$(ffmpeg -hide_banner -loglevel info \
+  # 直接测试RTSP流，简化参数
+  local output=$(timeout 15 ffmpeg -hide_banner -loglevel error \
     -rtsp_transport tcp \
-    -rtsp_flags prefer_tcp \
-    -stimeout 10000000 \
-    -timeout 10000000 \
     -i "$RTSP_URL" \
     -t 2 \
     -f null - 2>&1)
-  STATUS=$?
+  local status=$?
 
-  # 打印 ffmpeg 的输出，查看详细错误信息
-  echo "ffmpeg output:"
-  echo "$output"
-
-  # 打印返回码，帮助调试
-  echo "ffmpeg return status code: $STATUS"
-
-  # 判断 RTSP 流是否可用
-  if [[ $output == *"Protocol not found"* ]]; then
-    echo "RTSP stream is unavailable: Protocol not found (ffmpeg missing RTSP support)."
+  # 简化的错误检查
+  if [[ $status -eq 0 ]]; then
+    echo "✅ RTSP stream is available"
+    return 0
+  elif [[ $status -eq 124 ]]; then
+    echo "⏰ RTSP test timed out (15s) - treating as failure"
     return 1
-  elif [[ $output == *"Connection timed out"* ]]; then
-    echo "RTSP stream is unavailable: Connection timed out (network issue)."
-    return 1
-  elif [[ $output == *"No route to host"* ]]; then
-    echo "RTSP stream is unavailable: No route to host."
-    return 1
-  elif [[ $output == *"Connection refused"* ]]; then
-    echo "RTSP stream is unavailable: Connection refused."
-    return 1
-  elif [[ $output == *"Error opening input"* ]]; then
-    echo "RTSP stream is unavailable: Error opening input."
-    return 1
-  elif [[ $output == *"401 Unauthorized"* ]]; then
-    echo "RTSP stream is unavailable: Authentication required."
-    return 1
-  elif [ $STATUS -eq 0 ]; then
-    echo "RTSP stream is available."
-    return 0 # 返回 0 表示流可用
   else
-    echo "Failed to retrieve RTSP stream. Status code: $STATUS"
+    echo "❌ RTSP stream test failed (exit code: $status)"
+    [[ -n "$output" ]] && echo "Error: $output"
     return 1
   fi
 }
