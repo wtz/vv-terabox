@@ -20,13 +20,18 @@ log() {
 
 # Function to check if required variables are set
 check_config() {
-    if [[ -z "$jt" || -z "$bt" || -z "$co" ]]; then
+    if [[ -z "$jt" || -z "$co" ]]; then
         log "ERROR: Missing required TeraBox configuration"
         log "Required environment variables:"
         log "  TERABOX_JSTOKEN"
-        log "  TERABOX_BDSTOKEN"
         log "  TERABOX_COOKIE"
+        log "Optional environment variables:"
+        log "  TERABOX_BDSTOKEN (not always required)"
         exit 1
+    fi
+    
+    if [[ -z "$bt" ]]; then
+        log "WARNING: TERABOX_BDSTOKEN not provided - some operations may fail"
     fi
 }
 
