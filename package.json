@@ -1,0 +1,14 @@
+{
+  "name": "rtsp-recorder",
+  "version": "1.0.0",
+  "description": "RTSP video recorder with TeraBox upload",
+  "main": "upload_terabox.js",
+  "scripts": {
+    "upload": "node upload_terabox.js"
+  },
+  "dependencies": {
+    "terabox-upload-tool": "^1.0.0"
+  },
+  "author": "RTSP Recorder",
+  "license": "MIT"
+}
