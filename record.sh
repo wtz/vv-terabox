@@ -10,14 +10,104 @@ PID_FILE="/tmp/ffmpeg_pid.txt"
 
 mkdir -p "$output_folder"
 
+# 检查 RTSP URL 格式
+validate_rtsp_url() {
+  if [[ -z "$RTSP_URL" ]]; then
+    echo "ERROR: RTSP_URL environment variable is not set"
+    return 1
+  fi
+  
+  if [[ ! "$RTSP_URL" =~ ^rtsp:// ]]; then
+    echo "ERROR: RTSP_URL must start with 'rtsp://'"
+    echo "Current RTSP_URL: $RTSP_URL"
+    return 1
+  fi
+  
+  echo "RTSP URL format validated: $RTSP_URL"
+  return 0
+}
+
+# 检查 ffmpeg RTSP 支持
+check_ffmpeg_rtsp() {
+  echo "Checking ffmpeg RTSP support..."
+  if ! ffmpeg -protocols 2>/dev/null | grep -q "rtsp"; then
+    echo "ERROR: ffmpeg does not support RTSP protocol"
+    echo "Available protocols:"
+    ffmpeg -protocols 2>/dev/null | head -20
+    return 1
+  fi
+  echo "ffmpeg RTSP support confirmed"
+  return 0
+}
+
+# 检查网络连接
+check_network_connectivity() {
+  echo "Checking network connectivity..."
+  
+  # 检查 Tailscale 状态
+  if command -v tailscale >/dev/null 2>&1; then
+    echo "Tailscale status:"
+    tailscale status || echo "Failed to get Tailscale status"
+    echo "Tailscale IP:"
+    tailscale ip || echo "Failed to get Tailscale IP"
+  else
+    echo "Tailscale command not found"
+  fi
+  
+  # 从 RTSP URL 提取主机和端口
+  if [[ "$RTSP_URL" =~ rtsp://([^:/]+)(:([0-9]+))? ]]; then
+    local host="${BASH_REMATCH[1]}"
+    local port="${BASH_REMATCH[3]:-554}"  # RTSP 默认端口 554
+    
+    echo "Testing connectivity to RTSP host: $host:$port"
+    
+    # 使用 nc (netcat) 测试端口连接
+    if command -v nc >/dev/null 2>&1; then
+      if timeout 10 nc -z "$host" "$port" 2>/dev/null; then
+        echo "✓ Port $port on $host is reachable"
+        return 0
+      else
+        echo "✗ Port $port on $host is NOT reachable"
+        return 1
+      fi
+    else
+      echo "netcat not available, skipping port test"
+    fi
+  else
+    echo "Could not parse host from RTSP URL: $RTSP_URL"
+    return 1
+  fi
+}
+
 # 检查 RTSP 流是否可用的函数
 check_stream2() {
-  local frame_stuck_count=0
-  local last_frame=0
-  local current_frame=0
+  # 首先验证 URL 格式和 ffmpeg 支持
+  if ! validate_rtsp_url; then
+    return 1
+  fi
+  
+  if ! check_ffmpeg_rtsp; then
+    return 1
+  fi
+  
+  # 检查网络连接
+  if ! check_network_connectivity; then
+    echo "Network connectivity test failed"
+  fi
 
-  # 使用 ffmpeg 拉取 RTSP 流并获取输出
-  output=$(ffmpeg -hide_banner -loglevel error -timeout 5000000 -rtsp_transport tcp -i "$RTSP_URL" -t 1 -f null - 2>&1)
+  # 使用 ffmpeg 拉取 RTSP 流并获取输出，增加更多调试参数
+  echo "Testing RTSP connection to: $RTSP_URL"
+  echo "Using enhanced connection parameters..."
+  
+  # 使用更短的超时时间进行快速测试
+  output=$(ffmpeg -hide_banner -loglevel info \
+    -rtsp_transport tcp \
+    -rtsp_flags prefer_tcp \
+    -stimeout 10000000 \
+    -timeout 10000000 \
+    -i "$RTSP_URL" \
+    -t 2 \
+    -f null - 2>&1)
   STATUS=$?
 
   # 打印 ffmpeg 的输出，查看详细错误信息
@@ -28,7 +118,13 @@ check_stream2() {
   echo "ffmpeg return status code: $STATUS"
 
   # 判断 RTSP 流是否可用
-  if [[ $output == *"No route to host"* ]]; then
+  if [[ $output == *"Protocol not found"* ]]; then
+    echo "RTSP stream is unavailable: Protocol not found (ffmpeg missing RTSP support)."
+    return 1
+  elif [[ $output == *"Connection timed out"* ]]; then
+    echo "RTSP stream is unavailable: Connection timed out (network issue)."
+    return 1
+  elif [[ $output == *"No route to host"* ]]; then
     echo "RTSP stream is unavailable: No route to host."
     return 1
   elif [[ $output == *"Connection refused"* ]]; then
@@ -36,6 +132,9 @@ check_stream2() {
     return 1
   elif [[ $output == *"Error opening input"* ]]; then
     echo "RTSP stream is unavailable: Error opening input."
+    return 1
+  elif [[ $output == *"401 Unauthorized"* ]]; then
+    echo "RTSP stream is unavailable: Authentication required."
     return 1
   elif [ $STATUS -eq 0 ]; then
     echo "RTSP stream is available."
@@ -76,8 +175,8 @@ upload_loop() {
   inotifywait -m -e close_write --format '%w%f' "$output_folder" | while read FILE
   do
     echo "检测到新文件: $FILE"
-    # 使用 TeraBox 上传脚本
-    if ./terabox_upload.sh "$FILE"; then
+    # 使用TeraBox上传脚本 (优先使用Node.js库，然后代理，最后直接上传)
+    if ./terabox_upload_wrapper.sh "$FILE"; then
       echo "上传成功，删除本地文件: $FILE"
       rm "$FILE"
     else
