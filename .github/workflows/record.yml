@@ -31,15 +31,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y inotify-tools curl jq netcat-openbsd
           
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          
-      - name: Install Node.js dependencies
-        run: |
-          npm install
-          
       - name: Install ffmpeg with full codec support
         run: |
           # 安装完整版本的 ffmpeg，确保支持 RTSP
@@ -58,30 +49,20 @@ jobs:
       - name: Setup TeraBox credentials
         run: |
           echo "TeraBox configuration loaded from secrets"
-          echo "Legacy API credentials:"
+          echo "MUNFAQQIHA method credentials:"
           echo "  TERABOX_JSTOKEN is set: ${{ secrets.TERABOX_JSTOKEN != '' }}"
-          echo "  TERABOX_BDSTOKEN is set: ${{ secrets.TERABOX_BDSTOKEN != '' }} (optional)"
+          echo "  TERABOX_BDSTOKEN is set: ${{ secrets.TERABOX_BDSTOKEN != '' }} (optional but recommended)"
           echo "  TERABOX_COOKIE is set: ${{ secrets.TERABOX_COOKIE != '' }}"
-          echo "Node.js library credentials:"
-          echo "  TERABOX_NDUS is set: ${{ secrets.TERABOX_NDUS != '' }}"
-          echo "  TERABOX_APPID is set: ${{ secrets.TERABOX_APPID != '' }}"
-          echo "  TERABOX_UPLOADID is set: ${{ secrets.TERABOX_UPLOADID != '' }}"
-          echo "  TERABOX_BROWSERID is set: ${{ secrets.TERABOX_BROWSERID != '' }}"
 
       - name: Run recorder
         env:
           RTSP_URL: ${{ secrets.RTSP_URL }}
-          # Legacy API credentials (fallback)
+          # MUNFAQQIHA method credentials
           TERABOX_JSTOKEN: ${{ secrets.TERABOX_JSTOKEN }}
           TERABOX_BDSTOKEN: ${{ secrets.TERABOX_BDSTOKEN }}
           TERABOX_COOKIE: ${{ secrets.TERABOX_COOKIE }}
-          # Node.js library credentials (preferred)
-          TERABOX_NDUS: ${{ secrets.TERABOX_NDUS }}
-          TERABOX_APPID: ${{ secrets.TERABOX_APPID }}
-          TERABOX_UPLOADID: ${{ secrets.TERABOX_UPLOADID }}
-          TERABOX_BROWSERID: ${{ secrets.TERABOX_BROWSERID }}
           TERABOX_REMOTE_FOLDER: ${{ vars.TERABOX_REMOTE_FOLDER || '/rtsp-videos' }}
         run: |
-          chmod +x ./record.sh ./terabox_upload.sh ./terabox_upload_wrapper.sh ./upload_terabox.js
+          chmod +x ./record.sh ./terabox_upload_simple.sh
           ./record.sh
 
