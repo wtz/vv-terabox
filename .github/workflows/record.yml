@@ -35,7 +35,7 @@ jobs:
         run: |
           echo "TeraBox configuration loaded from secrets"
           echo "TERABOX_JSTOKEN is set: ${{ secrets.TERABOX_JSTOKEN != '' }}"
-          echo "TERABOX_BDSTOKEN is set: ${{ secrets.TERABOX_BDSTOKEN != '' }}"
+          echo "TERABOX_BDSTOKEN is set: ${{ secrets.TERABOX_BDSTOKEN != '' }} (optional)"
           echo "TERABOX_COOKIE is set: ${{ secrets.TERABOX_COOKIE != '' }}"
 
       - name: Run recorder
