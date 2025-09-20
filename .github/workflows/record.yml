@@ -31,13 +31,28 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y inotify-tools curl jq netcat-openbsd
           
-      - name: Install ffmpeg with full codec support
+      - name: Install ffmpeg with RTSP support
         run: |
-          # 安装完整版本的 ffmpeg，确保支持 RTSP
-          sudo apt-get install -y software-properties-common
-          sudo add-apt-repository -y ppa:savoury1/ffmpeg4
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          # 移除默认的ffmpeg
+          sudo apt-get remove -y ffmpeg || true
+          
+          # 方法1: 尝试snap安装
+          if sudo snap install ffmpeg; then
+            echo "✅ Installed ffmpeg via snap"
+            sudo ln -sf /snap/bin/ffmpeg /usr/bin/ffmpeg
+            sudo ln -sf /snap/bin/ffprobe /usr/bin/ffprobe
+          else
+            echo "⚠️ Snap failed, trying static build..."
+            # 方法2: 使用静态编译版本
+            wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+            tar -xf ffmpeg-release-amd64-static.tar.xz
+            sudo cp ffmpeg-*-amd64-static/ffmpeg /usr/local/bin/
+            sudo cp ffmpeg-*-amd64-static/ffprobe /usr/local/bin/
+            sudo chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe
+            sudo ln -sf /usr/local/bin/ffmpeg /usr/bin/ffmpeg
+            sudo ln -sf /usr/local/bin/ffprobe /usr/bin/ffprobe
+            echo "✅ Installed ffmpeg static build"
+          fi
           
       - name: Verify ffmpeg RTSP support
         run: |
