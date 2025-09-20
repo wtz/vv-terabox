@@ -1,1 +1,50 @@
+name: record
+
+on:
+  workflow_dispatch:        # 手动触发
+
+permissions:
+  contents: read
+  actions: write
+  id-token: write
+
+concurrency:
+  group: record
+  cancel-in-progress: false
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360   # 最长录制 6 小时
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Tailscale
+        uses: huggingface/tailscale-action@main
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg inotify-tools curl jq
+
+      - name: Setup TeraBox credentials
+        run: |
+          echo "TeraBox configuration loaded from secrets"
+          echo "TERABOX_JSTOKEN is set: ${{ secrets.TERABOX_JSTOKEN != '' }}"
+          echo "TERABOX_BDSTOKEN is set: ${{ secrets.TERABOX_BDSTOKEN != '' }}"
+          echo "TERABOX_COOKIE is set: ${{ secrets.TERABOX_COOKIE != '' }}"
+
+      - name: Run recorder
+        env:
+          RTSP_URL: ${{ secrets.RTSP_URL }}
+          TERABOX_JSTOKEN: ${{ secrets.TERABOX_JSTOKEN }}
+          TERABOX_BDSTOKEN: ${{ secrets.TERABOX_BDSTOKEN }}
+          TERABOX_COOKIE: ${{ secrets.TERABOX_COOKIE }}
+        run: |
+          chmod +x ./record.sh ./terabox_upload.sh
+          ./record.sh
 
