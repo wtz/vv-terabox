@@ -175,8 +175,8 @@ upload_loop() {
   inotifywait -m -e close_write --format '%w%f' "$output_folder" | while read FILE
   do
     echo "检测到新文件: $FILE"
-    # 使用TeraBox上传脚本 (优先使用Node.js库，然后代理，最后直接上传)
-    if ./terabox_upload_wrapper.sh "$FILE"; then
+    # 使用MUNFAQQIHA的TeraBox上传脚本
+    if ./terabox_upload_simple.sh "$FILE"; then
       echo "上传成功，删除本地文件: $FILE"
       rm "$FILE"
     else
