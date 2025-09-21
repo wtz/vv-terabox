@@ -17,5 +17,9 @@
 - TERABOX_JSTOKEN ✅
 - TERABOX_COOKIE ✅
 - TERABOX_BDSTOKEN 
- 
+
+
+
+ 感谢这个解决：
+ https://gist.github.com/nis267/74c6315f6dbd24a0b8889acdd08789e6 提供思路
     
