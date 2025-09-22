@@ -22,6 +22,9 @@ jobs:
     timeout-minutes: 360   # 最长录制 6 小时
 
     steps:
+      - name: Show time
+        run: date -u && date
+        
       - name: Checkout repo
         uses: actions/checkout@v4
 
