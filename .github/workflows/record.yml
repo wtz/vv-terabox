@@ -54,6 +54,8 @@ jobs:
           echo "  TERABOX_JSTOKEN is set: ${{ secrets.TERABOX_JSTOKEN != '' }}"
           echo "  TERABOX_BDSTOKEN is set: ${{ secrets.TERABOX_BDSTOKEN != '' }} (optional but recommended)"
           echo "  TERABOX_COOKIE is set: ${{ secrets.TERABOX_COOKIE != '' }}"
+          echo "Notification configuration:"
+          echo "  DINGDING_WEBHOOK is set: ${{ secrets.DINGDING_WEBHOOK != '' }}"
 
       - name: Run recorder
         env:
@@ -63,6 +65,8 @@ jobs:
           TERABOX_BDSTOKEN: ${{ secrets.TERABOX_BDSTOKEN }}
           TERABOX_COOKIE: ${{ secrets.TERABOX_COOKIE }}
           TERABOX_REMOTE_FOLDER: ${{ vars.TERABOX_REMOTE_FOLDER || '/rtsp-videos' }}
+          # DingTalk notification webhook
+          DINGDING_WEBHOOK: ${{ secrets.DINGDING_WEBHOOK }}
         run: |
           chmod +x ./record.sh ./terabox_upload_simple.sh
           ./record.sh
