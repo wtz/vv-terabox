@@ -157,6 +157,7 @@ upload_loop() {
       rm "$FILE"
     else
       echo "上传失败，保留本地文件: $FILE"
+      echo "错误详情已通过钉钉通知发送（如果配置了 DINGDING_WEBHOOK）"
     fi
   done
 }

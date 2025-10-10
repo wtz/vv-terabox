@@ -8,9 +8,10 @@ set +H
 
 # Configuration from environment variables
 jt="${TERABOX_JSTOKEN}"
-bt="${TERABOX_BDSTOKEN}" 
+bt="${TERABOX_BDSTOKEN}"
 co="${TERABOX_COOKIE}"
 rf="${TERABOX_REMOTE_FOLDER:-/rtsp-videos}"
+dd_webhook="${DINGDING_WEBHOOK}"
 
 # Fixed configuration
 ua='okhttp/7.4'
@@ -19,6 +20,45 @@ bo='https://www.terabox.com'
 # Function to log messages
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# Function to send DingTalk notification
+send_dingtalk_notification() {
+    local title="$1"
+    local message="$2"
+
+    if [[ -z "$dd_webhook" ]]; then
+        log "⚠️  DingTalk webhook not configured, skipping notification"
+        return 0
+    fi
+
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local json_payload=$(jq -n \
+        --arg title "$title" \
+        --arg text "$message" \
+        --arg timestamp "$timestamp" \
+        '{
+            "msgtype": "markdown",
+            "markdown": {
+                "title": $title,
+                "text": ("### " + $title + "\n\n" + $text + "\n\n---\n\n**时间:** " + $timestamp)
+            }
+        }')
+
+    local response=$(curl -s -w "\n%{http_code}" -X POST "$dd_webhook" \
+        -H "Content-Type: application/json" \
+        -d "$json_payload")
+
+    local http_code=$(echo "$response" | tail -n1)
+    local body=$(echo "$response" | head -n-1)
+
+    if [[ "$http_code" == "200" ]]; then
+        log "✅ DingTalk notification sent successfully"
+        return 0
+    else
+        log "⚠️  Failed to send DingTalk notification (HTTP $http_code): $body"
+        return 1
+    fi
 }
 
 # Function to check if required variables are set
@@ -146,9 +186,19 @@ upload_file() {
     log "🎯 Preparing upload on TeraBox..."
     local pc=$(curl -s "${bo}/api/precreate?app_id=250528&jsToken=${jt}" -A "${ua}" -b "${co}" -H "Origin: ${bo}" -e "${bo}/" \
         --data-raw "path=${fp}&size=${sz}&autoinit=1&rtype=3&target_path=${tp}&block_list=${md5}")
-    
+
     if ! echo "$pc" | jq -e '.uploadid' >/dev/null 2>&1; then
+        local errno=$(echo "$pc" | jq -r '.errno // -1')
+        local errmsg=$(echo "$pc" | jq -r '.errmsg // "unknown error"')
         log "❌ ERROR: Precreate failed. Response: $pc"
+
+        # Send DingTalk notification for precreate failure
+        local filename=$(basename "${yu}")
+        local filesize=$(numfmt --to=iec-i --suffix=B $sz 2>/dev/null || echo "$sz bytes")
+        send_dingtalk_notification \
+            "⚠️ TeraBox 上传准备失败" \
+            "**文件名:** \`$filename\`\n\n**文件大小:** $filesize\n\n**错误代码:** $errno\n\n**错误信息:** $errmsg\n\n**目标路径:** ${rf}/\n\n**可能原因:** 认证凭据已过期或需要验证，请更新 TERABOX_JSTOKEN, TERABOX_COOKIE, TERABOX_BDSTOKEN"
+
         rm -f "${prefix}"* 2>/dev/null
         return 1
     fi
@@ -200,20 +250,27 @@ upload_file() {
     # Check result
     if echo "$create" | jq -e '.errno == 0' >/dev/null 2>&1; then
         log "🎉 SUCCESS: File uploaded to ${rf}/$(basename "${yu}")"
-        
+
         # Clean up pieces
         rm -f "${prefix}"* 2>/dev/null
-        
+
         return 0
     else
         local errno=$(echo "$create" | jq -r '.errno // -1')
         local errmsg=$(echo "$create" | jq -r '.errmsg // "unknown error"')
         log "❌ ERROR: Upload failed (errno: $errno, message: $errmsg)"
         log "Response: $create"
-        
+
+        # Send DingTalk notification for upload failure
+        local filename=$(basename "${yu}")
+        local filesize=$(numfmt --to=iec-i --suffix=B $sz 2>/dev/null || echo "$sz bytes")
+        send_dingtalk_notification \
+            "⚠️ TeraBox 上传失败" \
+            "**文件名:** \`$filename\`\n\n**文件大小:** $filesize\n\n**错误代码:** $errno\n\n**错误信息:** $errmsg\n\n**目标路径:** ${rf}/\n\n请检查 TeraBox 认证凭据是否过期"
+
         # Clean up pieces
         rm -f "${prefix}"* 2>/dev/null
-        
+
         return 1
     fi
 }
@@ -268,12 +325,13 @@ main() {
     done
     
     log ""
-    log "📊 Upload Summary: $success_count/$total_count files uploaded successfully"
-    
     if [[ $success_count -eq $total_count ]]; then
+        log "📊 Upload Summary: $success_count/$total_count files uploaded successfully"
         log "🎉 All uploads completed successfully!"
         exit 0
     else
+        local failed_count=$((total_count - success_count))
+        log "📊 Upload Summary: $success_count succeeded, $failed_count failed (total: $total_count files)"
         log "⚠️  Some uploads failed. Check logs above for details."
         exit 1
     fi
