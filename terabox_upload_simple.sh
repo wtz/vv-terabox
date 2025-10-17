@@ -41,7 +41,7 @@ send_dingtalk_notification() {
             "msgtype": "markdown",
             "markdown": {
                 "title": $title,
-                "text": ("### " + $title + "\n\n" + $text + "\n\n---\n\n**时间:** " + $timestamp)
+                "text": ("### " + $title + "\n\n" + $text + "\n\n---\n\n**时间:** " + $timestamp + "\n\n**消息推送**")
             }
         }')
 
@@ -250,6 +250,13 @@ upload_file() {
     # Check result
     if echo "$create" | jq -e '.errno == 0' >/dev/null 2>&1; then
         log "🎉 SUCCESS: File uploaded to ${rf}/$(basename "${yu}")"
+
+        # Send DingTalk notification for successful upload
+        local filename=$(basename "${yu}")
+        local filesize=$(numfmt --to=iec-i --suffix=B $sz 2>/dev/null || echo "$sz bytes")
+        send_dingtalk_notification \
+            "✅ TeraBox 上传成功" \
+            "**文件名:** \`$filename\`\n\n**文件大小:** $filesize\n\n**目标路径:** ${rf}/\n\n**状态:** 上传完成"
 
         # Clean up pieces
         rm -f "${prefix}"* 2>/dev/null
