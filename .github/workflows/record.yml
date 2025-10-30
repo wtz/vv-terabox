@@ -1,13 +1,10 @@
 name: record
 
 on:
-  workflow_dispatch:        # 手动触发
+  workflow_dispatch:
   schedule:
-    # 改成在第1个6个小时结束后才才开始
-   # - cron: "0 23 * * *"
-    - cron: "30 4 * * *"
-    
-
+   - cron: "30 4 * * *"
+   
 permissions:
   contents: read
   actions: write
@@ -20,27 +17,31 @@ concurrency:
 jobs:
   record:
     runs-on: ubuntu-latest
-    timeout-minutes: 360   # 最长录制 6 小时
+    timeout-minutes: 360
 
     steps:
       - name: Show time
         run: date -u && date
-        
+
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Tailscale with optimized device management
-        uses: huggingface/tailscale-action@main
+      # ✅ 改用官方 Tailscale Action（OAuth），不要再传 hostname
+      - name: Tailscale (OAuth)
+        uses: tailscale/github-action@v4
         with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
-          hostname: rtsp-recorder-github
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          # 这些 tag 必须在你的 Tailscale ACL 中被允许
           tags: tag:github-actions,tag:recorder
+          # 可选：固定版本或使用 latest
+          # version: latest
 
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg inotify-tools curl jq netcat-openbsd
-          
+
       - name: Verify ffmpeg RTSP support
         run: |
           echo "Checking ffmpeg version and protocols:"
@@ -61,24 +62,34 @@ jobs:
       - name: Run recorder
         env:
           RTSP_URL: ${{ secrets.RTSP_URL }}
-          # MUNFAQQIHA method credentials
           TERABOX_JSTOKEN: ${{ secrets.TERABOX_JSTOKEN }}
           TERABOX_BDSTOKEN: ${{ secrets.TERABOX_BDSTOKEN }}
           TERABOX_COOKIE: ${{ secrets.TERABOX_COOKIE }}
           TERABOX_REMOTE_FOLDER: ${{ vars.TERABOX_REMOTE_FOLDER || '/rtsp-videos' }}
-          # DingTalk notification webhook
           DINGDING_WEBHOOK: ${{ secrets.DINGDING_WEBHOOK }}
         run: |
           chmod +x ./record.sh ./terabox_upload_simple.sh
           ./record.sh
+
+      # 🔍 失败时把 tailscaled 日志打出来，快速定位（非常有用）
+      - name: Dump tailscaled log on failure
+        if: failure()
+        run: |
+          if [ -f "$HOME/tailscaled.log" ]; then
+            echo "=== tailscaled.log ==="
+            cat "$HOME/tailscaled.log"
+          else
+            echo "tailscaled.log not found"
+          fi
 
   auto-restart:
     needs: record
     runs-on: ubuntu-latest
     if: ${{ always() }}
     steps:
+      # ⚠️ 你原来这里引用了 steps.gate.outputs.run，但没有名为 gate 的步骤，会永远跳过
+      # 如果你就是想总是自触发一次（不建议），去掉 if 条件；否则请真正加上 gate 步骤。
       - name: Trigger self
-        if: steps.gate.outputs.run == 'true'
         uses: benc-uk/workflow-dispatch@v1
         with:
           workflow: record.yml
