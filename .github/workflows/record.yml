@@ -1,9 +1,9 @@
 name: record
 
-on:
-  workflow_dispatch:
-  schedule:
-   - cron: "30 4 * * *"
+# on:
+#   workflow_dispatch:
+#   schedule:
+#    - cron: "30 4 * * *"
    
 permissions:
   contents: read
